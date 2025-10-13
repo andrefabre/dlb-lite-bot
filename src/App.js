@@ -8,6 +8,8 @@ function App() {
   const [biometricToken, setBiometricToken] = useState('');
   const [assets, setAssets] = useState([]);
   const [newAsset, setNewAsset] = useState({ type: '', details: '', notes: '' });
+  const [lastAction, setLastAction] = useState('');
+  const [lastError, setLastError] = useState('');
 
   // Helper to show alerts using Telegram SDK when available, or window.alert when not
   const showAlert = (msg) => {
@@ -201,39 +203,72 @@ function App() {
 
   // Save assets
   const saveAsset = () => {
-    if (!tg) return showAlert('Telegram API not available');
+    setLastError('');
+    setLastAction('saveAsset');
+    if (!tg) {
+      setLastError('Telegram API not available');
+      return showAlert('Telegram API not available');
+    }
     if (assets.length >= 10) { // Limit to 10
+      setLastError('Maximum assets reached');
       return showAlert('Maximum 10 assets allowed');
     }
     const updatedAssets = [...assets, newAsset];
-    const encrypted = encryptData(updatedAssets);
-    tg.SecureStorage.setItem('dlv_assets', encrypted, (err, success) => {
-      if (success) {
-        setAssets(updatedAssets);
-        setNewAsset({ type: '', details: '', notes: '' });
-        tg.HapticFeedback && tg.HapticFeedback.notificationOccurred && tg.HapticFeedback.notificationOccurred('success');
-        showAlert('Asset saved!');
-      } else if (err) {
-        console.error(err);
-        showAlert('Failed to save asset');
-      }
-    });
+    // optimistic update so UI is responsive
+    try {
+      setAssets(updatedAssets);
+      setNewAsset({ type: '', details: '', notes: '' });
+      const encrypted = encryptData(updatedAssets);
+      tg.SecureStorage.setItem('dlv_assets', encrypted, (err, success) => {
+        if (err || !success) {
+          console.error('SecureStorage.setItem failed', err);
+          setLastError(err ? String(err) : 'setItem returned false');
+          // revert optimistic update
+          setAssets(assets);
+          showAlert('Failed to save asset');
+        } else {
+          tg.HapticFeedback && tg.HapticFeedback.notificationOccurred && tg.HapticFeedback.notificationOccurred('success');
+          showAlert('Asset saved!');
+        }
+      });
+    } catch (ex) {
+      console.error('saveAsset exception', ex);
+      setLastError(String(ex));
+      setAssets(assets);
+      showAlert('Failed to save asset (exception)');
+    }
   };
 
   // Delete asset
   const deleteAsset = (index) => {
-    if (!tg) return showAlert('Telegram API not available');
+    setLastError('');
+    setLastAction('deleteAsset');
+    if (!tg) {
+      setLastError('Telegram API not available');
+      return showAlert('Telegram API not available');
+    }
     const updatedAssets = assets.filter((_, i) => i !== index);
-    const encrypted = encryptData(updatedAssets);
-    tg.SecureStorage.setItem('dlv_assets', encrypted, (err, success) => {
-      if (success) {
-        setAssets(updatedAssets);
-        showAlert('Asset deleted!');
-      } else if (err) {
-        console.error(err);
-        showAlert('Failed to delete asset');
-      }
-    });
+    try {
+      // optimistic
+      const prior = assets;
+      setAssets(updatedAssets);
+      const encrypted = encryptData(updatedAssets);
+      tg.SecureStorage.setItem('dlv_assets', encrypted, (err, success) => {
+        if (err || !success) {
+          console.error('SecureStorage.setItem failed', err);
+          setLastError(err ? String(err) : 'setItem returned false');
+          // revert
+          setAssets(prior);
+          showAlert('Failed to delete asset');
+        } else {
+          showAlert('Asset deleted!');
+        }
+      });
+    } catch (ex) {
+      console.error('deleteAsset exception', ex);
+      setLastError(String(ex));
+      showAlert('Failed to delete asset (exception)');
+    }
   };
 
   // If Telegram is not available, show a small UI to enable dev mode for local testing
@@ -275,7 +310,7 @@ function App() {
             </div>
           </div>
           <pre style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>
-{JSON.stringify({ devMode: !!devMode, tg: !!tg, isAuthenticated, biometricToken: biometricToken ? '[redacted]' : '', assetsLength: assets.length }, null, 2)}
+{JSON.stringify({ devMode: !!devMode, tg: !!tg, isAuthenticated, biometricToken: biometricToken ? '[redacted]' : '', assetsLength: assets.length, lastAction, lastError }, null, 2)}
           </pre>
         </div>
       )}
