@@ -13,8 +13,78 @@ function App() {
 
   // Helper to show alerts using Telegram SDK when available, or window.alert when not
   const showAlert = (msg) => {
-    if (tg && typeof tg.showAlert === 'function') return tg.showAlert(msg);
-    return window.alert(msg);
+    // Try Telegram showAlert, but fall back to window.alert and swallow WebAppMethodUnsupported
+    try {
+      if (tg && typeof tg.showAlert === 'function') {
+        try {
+          tg.showAlert(msg);
+          return;
+        } catch (e) {
+          console.warn('tg.showAlert failed, falling back to window.alert', e);
+        }
+      }
+    } catch (e) {
+      console.warn('showAlert wrapper unexpected error', e);
+    }
+    try { window.alert(msg); } catch (e) { console.error('window.alert failed', e); }
+  };
+
+  // Safe wrappers for SecureStorage (fallback to localStorage if SecureStorage is unsupported)
+  const secureGetItem = (key, cb) => {
+    try {
+      if (tg && tg.SecureStorage && typeof tg.SecureStorage.getItem === 'function') {
+        try {
+          return tg.SecureStorage.getItem(key, cb);
+        } catch (e) {
+          console.warn('tg.SecureStorage.getItem threw, falling back to localStorage', e);
+        }
+      }
+    } catch (e) {
+      console.warn('secureGetItem unexpected error', e);
+    }
+    // async to mimic callback
+    setTimeout(() => {
+      try {
+        const v = localStorage.getItem(key);
+        cb(null, v);
+      } catch (err) {
+        cb(err);
+      }
+    }, 0);
+  };
+
+  const secureSetItem = (key, value, cb) => {
+    try {
+      if (tg && tg.SecureStorage && typeof tg.SecureStorage.setItem === 'function') {
+        try {
+          return tg.SecureStorage.setItem(key, value, cb);
+        } catch (e) {
+          console.warn('tg.SecureStorage.setItem threw, falling back to localStorage', e);
+        }
+      }
+    } catch (e) {
+      console.warn('secureSetItem unexpected error', e);
+    }
+    setTimeout(() => {
+      try {
+        localStorage.setItem(key, value);
+        cb(null, true);
+      } catch (err) {
+        cb(err, false);
+      }
+    }, 0);
+  };
+
+  const safeHaptic = (type) => {
+    try {
+      tg && tg.HapticFeedback && typeof tg.HapticFeedback.notificationOccurred === 'function' && tg.HapticFeedback.notificationOccurred(type);
+    } catch (e) {
+      console.warn('HapticFeedback failed', e);
+    }
+  };
+
+  const safeClose = () => {
+    try { tg && typeof tg.close === 'function' && tg.close(); } catch (e) { console.warn('tg.close failed', e); }
   };
 
   // Create a simple fake Telegram WebApp for local dev mode so UI can be tested in a browser.
@@ -173,8 +243,7 @@ function App() {
 
   // Load assets from SecureStorage using current biometric key
   const loadAssets = () => {
-    if (!tg) return;
-    tg.SecureStorage.getItem('dlv_assets', (err, value) => {
+    secureGetItem('dlv_assets', (err, value) => {
       if (!err && value) {
         try {
           const decrypted = decryptData(value);
@@ -188,8 +257,7 @@ function App() {
 
   // Helper to load assets with a specific token (used in dev mode)
   const loadAssetsWithToken = (token) => {
-    if (!tg) return;
-    tg.SecureStorage.getItem('dlv_assets', (err, value) => {
+    secureGetItem('dlv_assets', (err, value) => {
       if (!err && value) {
         try {
           const decrypted = decryptData(value, token);
@@ -219,7 +287,7 @@ function App() {
       setAssets(updatedAssets);
       setNewAsset({ type: '', details: '', notes: '' });
       const encrypted = encryptData(updatedAssets);
-      tg.SecureStorage.setItem('dlv_assets', encrypted, (err, success) => {
+      secureSetItem('dlv_assets', encrypted, (err, success) => {
         if (err || !success) {
           console.error('SecureStorage.setItem failed', err);
           setLastError(err ? String(err) : 'setItem returned false');
@@ -227,7 +295,7 @@ function App() {
           setAssets(assets);
           showAlert('Failed to save asset');
         } else {
-          tg.HapticFeedback && tg.HapticFeedback.notificationOccurred && tg.HapticFeedback.notificationOccurred('success');
+          safeHaptic('success');
           showAlert('Asset saved!');
         }
       });
@@ -253,7 +321,7 @@ function App() {
       const prior = assets;
       setAssets(updatedAssets);
       const encrypted = encryptData(updatedAssets);
-      tg.SecureStorage.setItem('dlv_assets', encrypted, (err, success) => {
+      secureSetItem('dlv_assets', encrypted, (err, success) => {
         if (err || !success) {
           console.error('SecureStorage.setItem failed', err);
           setLastError(err ? String(err) : 'setItem returned false');
