@@ -13,7 +13,7 @@ module.exports = async (req, res) => {
       .join('\n');
 
     const secretKey = crypto.createHmac('sha256', 'WebAppData')
-      .update('YOUR_BOT_TOKEN')
+      .update('8379546363:AAGPvEX6OMHh-8cVA-lSGOJDSgcy2xrmDv8')
       .digest();
 
     const computedHash = crypto.createHmac('sha256', secretKey)
