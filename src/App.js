@@ -72,6 +72,14 @@ function App() {
   };
 
   useEffect(() => {
+    // If URL contains ?dev=1 enable devMode automatically (useful on deployed preview)
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('dev') === '1') setDevMode(true);
+    } catch (e) {
+      // ignore
+    }
+
     const telegram = window.Telegram?.WebApp;
     if (telegram) {
       setTg(telegram);
@@ -246,6 +254,12 @@ function App() {
 
   return (
     <div style={{ padding: '20px', color: tg.themeParams.text_color, backgroundColor: tg.themeParams.bg_color }}>
+      {devMode && (
+        <div style={{ background: '#fff3bf', color: '#664d03', padding: '8px 12px', borderRadius: 6, marginBottom: 12, border: '1px solid #ffe58f' }}>
+          <strong>Dev Mode</strong> — running with a simulated Telegram API. Data is stored in localStorage.
+          <button onClick={() => setDevMode(false)} style={{ float: 'right', background: 'transparent', border: 'none', cursor: 'pointer' }}>Dismiss</button>
+        </div>
+      )}
       <h1>Lite Digital Legacy Vault</h1>
       <p>Store and retrieve asset info securely (no passwords/seed phrases).</p>
       {isAuthenticated ? (
