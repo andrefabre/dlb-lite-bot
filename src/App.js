@@ -91,7 +91,6 @@ function App() {
   // Create a simple fake Telegram WebApp for local dev mode so UI can be tested in a browser.
   const createFakeTelegram = () => {
     const handlers = {};
-    const storageKey = 'dlv_assets';
     return {
       themeParams: { bg_color: '#ffffff', text_color: '#000000' },
       ready: () => {},
@@ -144,6 +143,7 @@ function App() {
     };
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     // If URL contains ?dev=1 enable devMode automatically (useful on deployed preview)
     try {
@@ -193,6 +193,7 @@ function App() {
   }, []);
 
   // When devMode is toggled on in a regular browser, create fake Telegram object
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (devMode && !tg) {
       const fake = createFakeTelegram();
@@ -218,7 +219,7 @@ function App() {
       const { valid } = await response.json();
       if (!valid) {
         showAlert('Invalid session! Please restart.');
-        tg.close && tg.close();
+        safeClose();
       }
     } catch (error) {
       console.error('Validation failed', error);
