@@ -262,7 +262,18 @@ function App() {
       )}
       {devMode && (
         <div style={{ background: '#f6f8fa', border: '1px solid #e1e4e8', padding: 12, borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
-          <strong>Debug</strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong>Debug</strong>
+            <div>
+              <button onClick={() => {
+                // simulate biometric auth in dev mode
+                const token = 'dev-biometric-token';
+                setIsAuthenticated(true);
+                setBiometricToken(token);
+                loadAssetsWithToken(token);
+              }} style={{ marginRight: 8 }}>Simulate Auth</button>
+            </div>
+          </div>
           <pre style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>
 {JSON.stringify({ devMode: !!devMode, tg: !!tg, isAuthenticated, biometricToken: biometricToken ? '[redacted]' : '', assetsLength: assets.length }, null, 2)}
           </pre>
@@ -270,7 +281,7 @@ function App() {
       )}
       <h1>Lite Digital Legacy Vault</h1>
       <p>Store and retrieve asset info securely (no passwords/seed phrases).</p>
-      {isAuthenticated ? (
+  {(isAuthenticated || devMode) ? (
         <>
           <h2>Add New Asset</h2>
           <select value={newAsset.type} onChange={(e) => setNewAsset({ ...newAsset, type: e.target.value })}>
