@@ -8,6 +8,7 @@ function App() {
   const [biometricToken, setBiometricToken] = useState('');
   const [assets, setAssets] = useState([]);
   const [newAsset, setNewAsset] = useState({ type: '', details: '', notes: '' });
+  const [editingIndex, setEditingIndex] = useState(-1);
   const [lastAction, setLastAction] = useState('');
   const [lastError, setLastError] = useState('');
 
@@ -281,6 +282,33 @@ function App() {
       setLastError('Maximum assets reached');
       return showAlert('Maximum 10 assets allowed');
     }
+    if (editingIndex >= 0) {
+      // save edit
+      const updatedAssets = assets.map((a, i) => i === editingIndex ? newAsset : a);
+      setEditingIndex(-1);
+      try {
+        setAssets(updatedAssets);
+        setNewAsset({ type: '', details: '', notes: '' });
+        const encrypted = encryptData(updatedAssets);
+        secureSetItem('dlv_assets', encrypted, (err, success) => {
+          if (err || !success) {
+            console.error('SecureStorage.setItem failed', err);
+            setLastError(err ? String(err) : 'setItem returned false');
+            setAssets(assets);
+            showAlert('Failed to save asset');
+          } else {
+            safeHaptic('success');
+            showAlert('Asset saved!');
+          }
+        });
+      } catch (ex) {
+        console.error('saveAsset (edit) exception', ex);
+        setLastError(String(ex));
+        setAssets(assets);
+        showAlert('Failed to save asset (exception)');
+      }
+      return;
+    }
     const updatedAssets = [...assets, newAsset];
     // optimistic update so UI is responsive
     try {
@@ -337,6 +365,17 @@ function App() {
       setLastError(String(ex));
       showAlert('Failed to delete asset (exception)');
     }
+  };
+
+  const startEdit = (index) => {
+    setEditingIndex(index);
+    setNewAsset(assets[index]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelEdit = () => {
+    setEditingIndex(-1);
+    setNewAsset({ type: '', details: '', notes: '' });
   };
 
   // If Telegram is not available, show a small UI to enable dev mode for local testing
@@ -405,14 +444,20 @@ function App() {
             placeholder="Notes"
             style={{ width: '100%', margin: '10px 0', padding: '8px' }}
           />
-          <button onClick={saveAsset} style={{ padding: '10px 20px', margin: '10px 0' }}>Add Asset</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button onClick={saveAsset} style={{ padding: '10px 20px', margin: '10px 0' }}>{editingIndex >= 0 ? 'Save Changes' : 'Add Asset'}</button>
+            {editingIndex >= 0 && <button onClick={cancelEdit} style={{ padding: '10px 20px', margin: '10px 0' }}>Cancel</button>}
+          </div>
           <h2>Your Assets</h2>
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {assets.map((asset, i) => (
               <li key={i} style={{ margin: '10px 0', padding: '10px', border: '1px solid #ccc', borderRadius: '5px' }}>
                 <strong>{asset.type}:</strong> {asset.details}
                 {asset.notes && <p>Notes: {asset.notes}</p>}
-                <button onClick={() => deleteAsset(i)} style={{ marginTop: '5px' }}>Delete</button>
+                <div style={{ marginTop: '5px', display: 'flex', gap: 8 }}>
+                  <button onClick={() => startEdit(i)}>Edit</button>
+                  <button onClick={() => deleteAsset(i)}>Delete</button>
+                </div>
               </li>
             ))}
           </ul>
