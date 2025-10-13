@@ -14,6 +14,35 @@
   <!-- <link rel="manifest" href="%PUBLIC_URL%/manifest.json" /> -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <title>Asset Vault - Lite</title>
+    <!-- Inline debug: logs and visible banner to confirm JS runs before the React bundle -->
+    <script>
+      try {
+        console.log('INLINE DEBUG: inline script executed');
+        // create a small top banner so it's visible even if React doesn't run
+        (function(){
+          var b = document.createElement('div');
+          b.id = 'inline-debug-banner';
+          b.style.position = 'fixed';
+          b.style.top = '0';
+          b.style.left = '0';
+          b.style.right = '0';
+          b.style.zIndex = '9999';
+          b.style.background = '#fffae6';
+          b.style.color = '#5c3d00';
+          b.style.padding = '6px 10px';
+          b.style.borderBottom = '1px solid #ffe58f';
+          b.style.fontFamily = 'system-ui, -apple-system, Roboto, "Segoe UI", sans-serif';
+          b.style.textAlign = 'center';
+          b.style.fontSize = '13px';
+          b.innerText = 'INLINE DEBUG: inline script executed — if you see this, JS runs before bundle.';
+          document.addEventListener('DOMContentLoaded', function(){
+            document.body.appendChild(b);
+            // auto-hide after 6s
+            setTimeout(function(){ b.style.display = 'none'; }, 6000);
+          });
+        })();
+      } catch (e) { console.error('INLINE DEBUG error', e); }
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
