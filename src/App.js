@@ -76,6 +76,61 @@ function App() {
     }, 0);
   };
 
+  // Promise-based wrappers around secureGetItem / secureSetItem for easier async flows
+  const secureGetItemAsync = (key) => new Promise((resolve, reject) => {
+    try {
+      secureGetItem(key, (err, value) => {
+        if (err) return reject(err);
+        resolve(value);
+      });
+    } catch (e) { reject(e); }
+  });
+
+  const secureSetItemAsync = (key, value) => new Promise((resolve, reject) => {
+    try {
+      secureSetItem(key, value, (err, ok) => {
+        if (err) return reject(err);
+        resolve(ok);
+      });
+    } catch (e) { reject(e); }
+  });
+
+  // Master key stored in SecureStorage (device-bound). Generate on first successful auth.
+  const MASTER_KEY_KEY = 'dlv_master_key';
+
+  const ensureMasterKey = async () => {
+    try {
+      const existing = await secureGetItemAsync(MASTER_KEY_KEY).catch(() => null);
+      if (existing) return existing;
+      // generate 32 bytes random hex-ish string
+      const rand = CryptoJS.lib.WordArray.random(32).toString();
+      await secureSetItemAsync(MASTER_KEY_KEY, rand);
+      return rand;
+    } catch (e) {
+      console.error('ensureMasterKey error', e);
+      throw e;
+    }
+  };
+
+  const getMasterKey = async () => {
+    const mk = await secureGetItemAsync(MASTER_KEY_KEY).catch(() => null);
+    return mk || null;
+  };
+
+  const encryptWithMasterKey = async (data) => {
+    const mk = await getMasterKey();
+    if (!mk) throw new Error('master key not available');
+    return CryptoJS.AES.encrypt(JSON.stringify(data), mk).toString();
+  };
+
+  const decryptWithMasterKey = async (encrypted) => {
+    const mk = await getMasterKey();
+    if (!mk) throw new Error('master key not available');
+    const bytes = CryptoJS.AES.decrypt(encrypted, mk);
+    const txt = bytes.toString(CryptoJS.enc.Utf8);
+    return txt ? JSON.parse(txt) : null;
+  };
+
   const safeHaptic = (type) => {
     try {
       tg && tg.HapticFeedback && typeof tg.HapticFeedback.notificationOccurred === 'function' && tg.HapticFeedback.notificationOccurred(type);
@@ -244,31 +299,31 @@ function App() {
   };
 
   // Load assets from SecureStorage using current biometric key
-  const loadAssets = () => {
-    secureGetItem('dlv_assets', (err, value) => {
-      if (!err && value) {
-        try {
-          const decrypted = decryptData(value);
-          setAssets(decrypted);
-        } catch (e) {
-          showAlert('Error loading assets');
-        }
+  const loadAssets = async () => {
+    try {
+      const encrypted = await secureGetItemAsync('dlv_assets').catch(() => null);
+      if (!encrypted) {
+        setAssets([]);
+        return;
       }
-    });
+      const decrypted = await decryptWithMasterKey(encrypted);
+      setAssets(decrypted || []);
+    } catch (e) {
+      console.error('loadAssets error', e);
+      // If master key not available, assets cannot be decrypted — show empty
+      setAssets([]);
+    }
   };
 
-  // Helper to load assets with a specific token (used in dev mode)
-  const loadAssetsWithToken = (token) => {
-    secureGetItem('dlv_assets', (err, value) => {
-      if (!err && value) {
-        try {
-          const decrypted = decryptData(value, token);
-          setAssets(decrypted);
-        } catch (e) {
-          showAlert('Error loading assets');
-        }
-      }
-    });
+  // Helper kept for compatibility but now loads using master key (dev mode will generate master key)
+  const loadAssetsWithToken = async (_token) => {
+    // For MVP we will create/use a masterKey instead of token-based encryption
+    try {
+      await ensureMasterKey();
+    } catch (e) {
+      console.warn('Could not ensure master key in dev mode', e);
+    }
+    await loadAssets();
   };
 
   // Save assets
@@ -288,20 +343,24 @@ function App() {
       const updatedAssets = assets.map((a, i) => i === editingIndex ? newAsset : a);
       setEditingIndex(-1);
       try {
+        // persist using master key
         setAssets(updatedAssets);
         setNewAsset({ type: '', details: '', notes: '' });
-        const encrypted = encryptData(updatedAssets);
-        secureSetItem('dlv_assets', encrypted, (err, success) => {
-          if (err || !success) {
+        (async () => {
+          try {
+            const mk = await getMasterKey();
+            if (!mk) throw new Error('master key missing');
+            const encrypted = await encryptWithMasterKey(updatedAssets);
+            await secureSetItemAsync('dlv_assets', encrypted);
+            safeHaptic('success');
+            showAlert('Asset saved!');
+          } catch (err) {
             console.error('SecureStorage.setItem failed', err);
             setLastError(err ? String(err) : 'setItem returned false');
             setAssets(assets);
             showAlert('Failed to save asset');
-          } else {
-            safeHaptic('success');
-            showAlert('Asset saved!');
           }
-        });
+        })();
       } catch (ex) {
         console.error('saveAsset (edit) exception', ex);
         setLastError(String(ex));
@@ -315,19 +374,22 @@ function App() {
     try {
       setAssets(updatedAssets);
       setNewAsset({ type: '', details: '', notes: '' });
-      const encrypted = encryptData(updatedAssets);
-      secureSetItem('dlv_assets', encrypted, (err, success) => {
-        if (err || !success) {
+      (async () => {
+        try {
+          const mk = await getMasterKey();
+          if (!mk) throw new Error('master key missing');
+          const encrypted = await encryptWithMasterKey(updatedAssets);
+          await secureSetItemAsync('dlv_assets', encrypted);
+          safeHaptic('success');
+          showAlert('Asset saved!');
+        } catch (err) {
           console.error('SecureStorage.setItem failed', err);
           setLastError(err ? String(err) : 'setItem returned false');
           // revert optimistic update
           setAssets(assets);
           showAlert('Failed to save asset');
-        } else {
-          safeHaptic('success');
-          showAlert('Asset saved!');
         }
-      });
+      })();
     } catch (ex) {
       console.error('saveAsset exception', ex);
       setLastError(String(ex));
@@ -349,18 +411,21 @@ function App() {
       // optimistic
       const prior = assets;
       setAssets(updatedAssets);
-      const encrypted = encryptData(updatedAssets);
-      secureSetItem('dlv_assets', encrypted, (err, success) => {
-        if (err || !success) {
+      (async () => {
+        try {
+          const mk = await getMasterKey();
+          if (!mk) throw new Error('master key missing');
+          const encrypted = await encryptWithMasterKey(updatedAssets);
+          await secureSetItemAsync('dlv_assets', encrypted);
+          showAlert('Asset deleted!');
+        } catch (err) {
           console.error('SecureStorage.setItem failed', err);
           setLastError(err ? String(err) : 'setItem returned false');
           // revert
           setAssets(prior);
           showAlert('Failed to delete asset');
-        } else {
-          showAlert('Asset deleted!');
         }
-      });
+      })();
     } catch (ex) {
       console.error('deleteAsset exception', ex);
       setLastError(String(ex));
