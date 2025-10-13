@@ -260,6 +260,14 @@ function App() {
           <button onClick={() => setDevMode(false)} style={{ float: 'right', background: 'transparent', border: 'none', cursor: 'pointer' }}>Dismiss</button>
         </div>
       )}
+      {devMode && (
+        <div style={{ background: '#f6f8fa', border: '1px solid #e1e4e8', padding: 12, borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
+          <strong>Debug</strong>
+          <pre style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>
+{JSON.stringify({ devMode: !!devMode, tg: !!tg, isAuthenticated, biometricToken: biometricToken ? '[redacted]' : '', assetsLength: assets.length }, null, 2)}
+          </pre>
+        </div>
+      )}
       <h1>Lite Digital Legacy Vault</h1>
       <p>Store and retrieve asset info securely (no passwords/seed phrases).</p>
       {isAuthenticated ? (
