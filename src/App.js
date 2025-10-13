@@ -50,6 +50,7 @@ function App() {
 
   // Backend validation function (call your Vercel API)
   const validateInitData = async (initData) => {
+    if (!tg) return; // Guard for local testing
     try {
       const response = await fetch('/api/validate', {
         method: 'POST',
