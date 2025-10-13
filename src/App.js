@@ -464,7 +464,36 @@ function App() {
           </ul>
         </>
       ) : (
-        <p>Authenticate with biometrics to access your vault.</p>
+        <div>
+          <p>Authenticate with biometrics to access your vault.</p>
+          <div style={{ marginTop: 8 }}>
+            <button onClick={() => {
+              try {
+                // If BiometricManager exists, ensure access is requested first when needed
+                if (tg?.BiometricManager) {
+                  const bm = tg.BiometricManager;
+                  if (!bm.isAccessGranted && typeof bm.requestAccess === 'function') {
+                    bm.requestAccess({ reason: 'Unlock your vault' }, (granted) => {
+                      if (granted) {
+                        authenticateBiometrics();
+                      } else {
+                        showAlert('Biometric access was not granted.');
+                      }
+                    });
+                    return;
+                  }
+                  // Otherwise call authenticate directly
+                  authenticateBiometrics();
+                  return;
+                }
+                showAlert('Biometric auth not available in this Telegram client. Try updating Telegram or enable Dev Mode to test.');
+              } catch (e) {
+                console.error('Authenticate button error', e);
+                showAlert('Failed to start biometric authentication.');
+              }
+            }}>Authenticate</button>
+          </div>
+        </div>
       )}
     </div>
   );
